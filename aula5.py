@@ -6,10 +6,6 @@ from sklearn.model_selection import cross_val_score
 from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
-from sklearn.naive_bayes import GaussianNB
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.svm import SVC
-from sklearn.tree import DecisionTreeClassifier
 
 # %% abrir o database de treino e teste
 dataset_treino: DataFrame = pd.read_csv('data/train.csv')
@@ -28,7 +24,6 @@ dataset_teste: DataFrame = pd.read_csv('data/test.csv')
 # dataset_teste_valores_nulos = dataset_teste.isnull().sum()
 
 # %% Plotagem dos dados
-
 for i in dataset_treino.columns:
     plt.hist(dataset_treino[i])
     plt.title(i)
@@ -119,6 +114,13 @@ X_test = X_test[features]
 
 y_train = dataset_treino['Survived']
 
+# %% modelo e validação cruzada
+
+# logistic regression (algorítimo de classificação)
+model_lr = LogisticRegression(max_iter=10000, random_state=0)
+score = cross_val_score(model_lr, X_train, y_train, cv=10)
+print(np.mean(score))
+
 # %% Padronização das variáveis
 
 # Transforma os dados de treinamento em dados escalonados (média 0 e desvio padrão 1)
@@ -128,49 +130,9 @@ X_train = scaler.fit_transform(X_train)
 # o de teste não pode rodar o Fit
 X_test = scaler.transform(X_test)
 
-# %% modelo e validação cruzada
-
-# logistic regression (algorítimo de classificação)
-model_lr = LogisticRegression(max_iter=10000, random_state=0)
-score = cross_val_score(model_lr, X_train, y_train, cv=10)
-print(np.mean(score))
-
-# %% Naive Bayes para Classificação
-
-model_nb = GaussianNB()
-score = cross_val_score(model_nb, X_train, y_train, cv=10)
-print(np.mean(score))
-
-# %% KNN para classificação
-
-model_knn = KNeighborsClassifier(n_neighbors=5, p=2)
-score = cross_val_score(model_knn, X_train, y_train, cv=10)
-print(np.mean(score))
-
-# %% SVM para classificação
-
-model_svm = SVC(C=3, kernel='rbf', degree=2, gamma=0.1)
-score = cross_val_score(model_svm, X_train, y_train, cv=10)
-print(np.mean(score))
-
-# %% Decision Tree
-
-model_dt = DecisionTreeClassifier(criterion='entropy', max_depth=3, min_samples_split=2, min_samples_leaf=1,
-                                  random_state=0)
-score = cross_val_score(model_dt, X_train, y_train, cv=10)
-print(np.mean(score))
-
-# %% Random Forest
-from sklearn.ensemble import RandomForestClassifier
-
-model_rf = RandomForestClassifier(criterion='entropy', max_depth=3, min_samples_split=2, min_samples_leaf=1,
-                                  random_state=0, n_estimators=100)
-score = cross_val_score(model_rf, X_train, y_train, cv=10)
-print(np.mean(score))
-
 # %% Modelo Final
-model_rf.fit(X_train, y_train)
-y_pred = model_rf.predict(X_train)
+model_lr.fit(X_train, y_train)
+y_pred = model_lr.predict(X_train)
 mc = confusion_matrix(y_train, y_pred)  # matriz de confusão
 print(mc)
 
@@ -178,15 +140,15 @@ print(mc)
 # [[468  81] 468 certos, 81 errados
 # [109 233]] 109 errados, 233 certos
 
-score = model_rf.score(X_train, y_train)
+score = model_lr.score(X_train, y_train)
 print(score)
 
 # %% predição nos dados de teste
 
-y_pred = model_rf.predict(X_test)
+y_pred = model_lr.predict(X_test)
 
 submission = pd.DataFrame(dataset_teste['PassengerId'])
 
 submission['Survived'] = y_pred
 
-submission.to_csv('submission4.csv', index=False)
+submission.to_csv('submission3.csv', index=False)
