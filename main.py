@@ -4,46 +4,17 @@ from pandas import DataFrame
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_score
 from sklearn.metrics import confusion_matrix
-import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from skopt import gp_minimize
 
 # %% abrir o database de treino e teste
 dataset_treino: DataFrame = pd.read_csv('data/train.csv')
 dataset_teste: DataFrame = pd.read_csv('data/test.csv')
-
-# %% Análise dos campos do Dataset
-
-# Dataset de Treino
-# dataset_treino_descricao_estatistica = dataset_treino.describe()
-# dataset_treino_tipos_de_dados = dataset_treino.dtypes
-# dataset_treino_valores_nulos = dataset_treino.isnull().sum()
-
-# Dataset de Testes
-# dataset_teste_descricao_estatistica = dataset_teste.describe()
-# dataset_teste_tipos_de_dados = dataset_teste.dtypes
-# dataset_teste_valores_nulos = dataset_teste.isnull().sum()
-
-# %% Plotagem dos dados
-
-for i in dataset_treino.columns:
-    plt.hist(dataset_treino[i])
-    plt.title(i)
-    plt.show()
-
-# %% Groupby
-# agrupados_por_sobreviventes = dataset_treino.groupby('Survived').count()
-media_por_sobreviventes = dataset_treino.groupby(['Survived']).mean()
-
-# %% pivot_table
-sobreviventes_por_classe = pd.pivot_table(dataset_treino, index=['Survived'], columns=['Pclass'], values='PassengerId',
-                                          aggfunc='count')
-sobreviventes_por_embarque = pd.pivot_table(dataset_treino, index=['Survived'], columns=['Embarked'],
-                                            values='PassengerId',
-                                            aggfunc='count')
 
 # %% Tratamento dos dados
 
@@ -57,12 +28,6 @@ dataset_teste['Age'] = dataset_teste['Age'].fillna(teste_idade_media)
 
 # Verificando dados nulos na coluna Cabin
 lista_passageiros_cabine = dataset_treino.groupby('Cabin').size()
-
-
-# Criando nova coluna chamada "CabinByPclass"
-# - Verifica se o campo Cabin está preenchido, se estiver, pega apenas a primeira letra da cabine.
-# - Se estiver nulo, verifica qual a classe do passageiro e preenche aleatoriamente com a seguinte divisão:
-# [ 3 classe = E, F ou G ], [ 2 classe = D, E ou F], [ 1 classe = A, B ou C]
 
 def determine_cabin_by_pclass(row):
     if pd.notna(row['Cabin']):
@@ -128,65 +93,99 @@ X_train = scaler.fit_transform(X_train)
 # o de teste não pode rodar o Fit
 X_test = scaler.transform(X_test)
 
-# %% modelo e validação cruzada
-
-# logistic regression (algorítimo de classificação)
+# %% logistic regression (algorítimo de classificação)
 model_lr = LogisticRegression(max_iter=10000, random_state=0)
 score = cross_val_score(model_lr, X_train, y_train, cv=10)
 print(np.mean(score))
 
 # %% Naive Bayes para Classificação
-
 model_nb = GaussianNB()
 score = cross_val_score(model_nb, X_train, y_train, cv=10)
 print(np.mean(score))
 
 # %% KNN para classificação
-
 model_knn = KNeighborsClassifier(n_neighbors=5, p=2)
 score = cross_val_score(model_knn, X_train, y_train, cv=10)
 print(np.mean(score))
 
 # %% SVM para classificação
-
 model_svm = SVC(C=3, kernel='rbf', degree=2, gamma=0.1)
 score = cross_val_score(model_svm, X_train, y_train, cv=10)
 print(np.mean(score))
 
 # %% Decision Tree
-
 model_dt = DecisionTreeClassifier(criterion='entropy', max_depth=3, min_samples_split=2, min_samples_leaf=1,
                                   random_state=0)
 score = cross_val_score(model_dt, X_train, y_train, cv=10)
 print(np.mean(score))
 
 # %% Random Forest
-from sklearn.ensemble import RandomForestClassifier
 
 model_rf = RandomForestClassifier(criterion='entropy', max_depth=3, min_samples_split=2, min_samples_leaf=1,
                                   random_state=0, n_estimators=100)
 score = cross_val_score(model_rf, X_train, y_train, cv=10)
 print(np.mean(score))
 
-# %% Modelo Final
-model_rf.fit(X_train, y_train)
-y_pred = model_rf.predict(X_train)
-mc = confusion_matrix(y_train, y_pred)  # matriz de confusão
-print(mc)
 
-# OUTPUT:
-# [[468  81] 468 certos, 81 errados
-# [109 233]] 109 errados, 233 certos
+# %% Otimizando dos Hiperparâmetros
 
-score = model_rf.score(X_train, y_train)
-print(score)
+def treinar_modelo(hiperparametros):
+    model_rf_new = RandomForestClassifier(
+        criterion=hiperparametros[0],
+        n_estimators=hiperparametros[1],
+        max_depth=hiperparametros[2],
+        min_samples_split=hiperparametros[3],
+        min_samples_leaf=hiperparametros[4],
+        random_state=0,
+        n_jobs=-1
+    )
+    score = cross_val_score(model_rf_new, X_train, y_train, cv=10)
+    print(np.mean(score))
+
+    return -np.mean(score)
+
+
+hiperparametros = [('entropy', 'gini'), (100, 1000), (3, 20), (2, 10), (1, 10)]
+
+otimos = gp_minimize(
+    treinar_modelo,
+    hiperparametros,
+    random_state=0,
+    verbose=1,
+    n_calls=30,
+    n_random_starts=10
+)
+
+# %% Utilizando os valores Ótimos para os hiperparametros
+print(otimos.fun, otimos.x)
+
+model_rf_otimo = RandomForestClassifier(
+    criterion=otimos.x[0],
+    n_estimators=otimos.x[1],
+    max_depth=otimos.x[2],
+    min_samples_split=otimos.x[3],
+    min_samples_leaf=otimos.x[4],
+    random_state=0,
+    n_jobs=-1
+)
+
+# %% Ensanble model (Voting)
+from sklearn.ensemble import VotingClassifier
+
+model_voting = VotingClassifier(estimators=[
+    ('LR', model_lr),
+    ('KNN', model_knn),
+    ('SVM', model_svm),
+    ('RF', model_rf_otimo)
+], voting='hard')
+model_voting.fit(X_train, y_train)
+
+score = cross_val_score(model_voting, X_train, y_train, cv=10)
+print(np.mean(score))
 
 # %% predição nos dados de teste
 
-y_pred = model_rf.predict(X_test)
-
+y_pred = model_voting.predict(X_test)
 submission = pd.DataFrame(dataset_teste['PassengerId'])
-
 submission['Survived'] = y_pred
-
-submission.to_csv('submission4.csv', index=False)
+submission.to_csv('submission6.csv', index=False)
